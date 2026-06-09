@@ -41,6 +41,26 @@ public:
         }
     }
 
+    // If key exists, combines existing value with new value using combine(existing, value).
+    // If key doesn't exist, inserts value as-is. Defaults to addition.
+    template <typename Combine = std::plus<Value>>
+    Value append(const Key& key, const Value& value, Combine combine = {}){
+        auto [slot, found] = find_slot(key);
+        if (found){
+            Value& existing = dense_[sparse_[slot]].second;
+            existing = combine(existing, value);
+            return existing;
+        } else {
+            sparse_[slot] = size_;
+            dense_.emplace_back(key, value);
+            size_++;
+            if(size_ * 2 > sparse_.size()){
+                resize();
+            }
+            return value;
+        }
+    }
+
     void remove(const Key& key){
         auto [slot, found] = find_slot(key);
         if (!found) return;
