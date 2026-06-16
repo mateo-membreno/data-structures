@@ -1,4 +1,5 @@
 #include <cassert>
+#include <functional>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -7,6 +8,7 @@
 #include "vector.h"
 #include "mutex_vector.h"
 #include "queue.h"
+#include "priority_queue.h"
 
 void test_insert_and_get() {
     SparseDenseMap<std::string, int> m;
@@ -389,6 +391,83 @@ void test_queue_grow_after_dequeue() {
     std::cout << "PASS test_queue_grow_after_dequeue\n";
 }
 
+// ---- PriorityQueue tests ----
+
+void test_pq_max_heap_order() {
+    PriorityQueue<int> pq;
+    pq.push(3); pq.push(1); pq.push(4); pq.push(1); pq.push(5);
+    assert(pq.top() == 5);
+    pq.pop();
+    assert(pq.top() == 4);
+    pq.pop();
+    assert(pq.top() == 3);
+    std::cout << "PASS test_pq_max_heap_order\n";
+}
+
+void test_pq_min_heap_order() {
+    PriorityQueue<int, std::greater<int>> pq;
+    pq.push(3); pq.push(1); pq.push(4); pq.push(1); pq.push(5);
+    assert(pq.top() == 1);
+    pq.pop();
+    assert(pq.top() == 1);
+    pq.pop();
+    assert(pq.top() == 3);
+    std::cout << "PASS test_pq_min_heap_order\n";
+}
+
+void test_pq_size_and_empty() {
+    PriorityQueue<int> pq;
+    assert(pq.empty());
+    assert(pq.size() == 0);
+    pq.push(10);
+    assert(!pq.empty());
+    assert(pq.size() == 1);
+    pq.pop();
+    assert(pq.empty());
+    std::cout << "PASS test_pq_size_and_empty\n";
+}
+
+void test_pq_pop_empty() {
+    PriorityQueue<int> pq;
+    pq.pop();  // should not crash
+    assert(pq.size() == 0);
+    std::cout << "PASS test_pq_pop_empty\n";
+}
+
+void test_pq_grow_past_capacity() {
+    PriorityQueue<int> pq;
+    for (int i = 0; i < 20; i++) pq.push(i);
+    assert(pq.size() == 20);
+    assert(pq.top() == 19);
+    std::cout << "PASS test_pq_grow_past_capacity\n";
+}
+
+void test_pq_sorted_extraction() {
+    PriorityQueue<int> pq;
+    pq.push(5); pq.push(2); pq.push(8); pq.push(1); pq.push(9);
+    int prev = pq.top(); pq.pop();
+    while (!pq.empty()) {
+        assert(pq.top() <= prev);
+        prev = pq.top();
+        pq.pop();
+    }
+    std::cout << "PASS test_pq_sorted_extraction\n";
+}
+
+void test_pq_custom_comparator() {
+    // min-heap via lambda on a struct field
+    struct Task { int priority; std::string name; };
+    auto cmp = [](const Task& a, const Task& b){ return a.priority > b.priority; };
+    PriorityQueue<Task, decltype(cmp)> pq(cmp);
+    pq.push({3, "low"});
+    pq.push({1, "urgent"});
+    pq.push({2, "medium"});
+    assert(pq.top().priority == 1);
+    pq.pop();
+    assert(pq.top().priority == 2);
+    std::cout << "PASS test_pq_custom_comparator\n";
+}
+
 int main() {
     test_insert_and_get();
     test_update_existing_key();
@@ -429,6 +508,13 @@ int main() {
     test_queue_dequeue_updates_size();
     test_queue_grow_past_capacity();
     test_queue_grow_after_dequeue();
+    test_pq_max_heap_order();
+    test_pq_min_heap_order();
+    test_pq_size_and_empty();
+    test_pq_pop_empty();
+    test_pq_grow_past_capacity();
+    test_pq_sorted_extraction();
+    test_pq_custom_comparator();
     std::cout << "All tests passed.\n";
     return 0;
 }
