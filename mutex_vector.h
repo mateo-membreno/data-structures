@@ -5,7 +5,7 @@
 template <typename T>
 class MVector {
 public:
-    MVector() : data_(new T[8]), size_(0), capacity_(4) {
+    MVector() : data_(new T[8]), size_(0), capacity_(8) {
     }
     MVector(size_t n, const T &val) : data_(new T[n]), size_(n), capacity_(n) {
         for (size_t i = 0; i < n; i++){
