@@ -6,6 +6,7 @@
 #include "sparse_dense_map.hpp"
 #include "vector.h"
 #include "mutex_vector.h"
+#include "queue.h"
 
 void test_insert_and_get() {
     SparseDenseMap<std::string, int> m;
@@ -318,6 +319,76 @@ void test_mvector_remove() {
     std::cout << "PASS test_mvector_remove\n";
 }
 
+// ---- Queue tests ----
+
+void test_queue_default_constructor() {
+    Queue<int> q;
+    assert(q.size() == 0);
+    std::cout << "PASS test_queue_default_constructor\n";
+}
+
+void test_queue_fill_constructor() {
+    Queue<int> q(4, 7);
+    assert(q.size() == 4);
+    std::cout << "PASS test_queue_fill_constructor\n";
+}
+
+void test_queue_enqueue_size() {
+    Queue<int> q;
+    q.enqueue(1);
+    q.enqueue(2);
+    q.enqueue(3);
+    assert(q.size() == 3);
+    std::cout << "PASS test_queue_enqueue_size\n";
+}
+
+void test_queue_front_basic() {
+    Queue<int> q;
+    q.enqueue(10);
+    q.enqueue(20);
+    assert(q.front() == 10);
+    std::cout << "PASS test_queue_front_basic\n" ;
+}
+
+void test_queue_dequeue_returns_front() {
+    Queue<int> q;
+    q.enqueue(1);
+    q.enqueue(2);
+    q.enqueue(3);
+    assert(q.dequeue() == 1);
+    assert(q.dequeue() == 2);
+    assert(q.dequeue() == 3);
+    std::cout << "PASS test_queue_dequeue_returns_front\n";
+}
+
+void test_queue_dequeue_updates_size() {
+    Queue<int> q;
+    q.enqueue(1);
+    q.enqueue(2);
+    q.dequeue();
+    assert(q.size() == 1);
+    assert(q.front() == 2);
+    std::cout << "PASS test_queue_dequeue_updates_size\n";
+}
+
+void test_queue_grow_past_capacity() {
+    Queue<int> q;
+    for (int i = 0; i < 20; i++) q.enqueue(i);
+    assert(q.size() == 20);
+    assert(q.front() == 0);
+    std::cout << "PASS test_queue_grow_past_capacity\n";
+}
+
+void test_queue_grow_after_dequeue() {
+    Queue<int> q;
+    for (int i = 0; i < 5; i++) q.enqueue(i);
+    for (int i = 0; i < 3; i++) q.dequeue();  // head wraps around
+    for (int i = 5; i < 15; i++) q.enqueue(i);  // triggers resize mid-wrap
+    assert(q.size() == 12);
+    assert(q.front() == 3);
+    std::cout << "PASS test_queue_grow_after_dequeue\n";
+}
+
 int main() {
     test_insert_and_get();
     test_update_existing_key();
@@ -350,6 +421,14 @@ int main() {
     test_mvector_concurrent_push();
     test_mvector_concurrent_push_pop();
     test_mvector_remove();
+    test_queue_default_constructor();
+    test_queue_fill_constructor();
+    test_queue_enqueue_size();
+    test_queue_front_basic();
+    test_queue_dequeue_returns_front();
+    test_queue_dequeue_updates_size();
+    test_queue_grow_past_capacity();
+    test_queue_grow_after_dequeue();
     std::cout << "All tests passed.\n";
     return 0;
 }
