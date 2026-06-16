@@ -1,7 +1,11 @@
 #include <cassert>
 #include <iostream>
 #include <string>
+#include <thread>
+#include <vector>
 #include "sparse_dense_map.hpp"
+#include "vector.h"
+#include "mutex_vector.h"
 
 void test_insert_and_get() {
     SparseDenseMap<std::string, int> m;
@@ -174,6 +178,146 @@ void test_insert_after_removes() {
     std::cout << "PASS test_insert_after_removes\n";
 }
 
+// ---- Vector tests ----
+
+void test_vector_push_and_access() {
+    Vector<int> v;
+    v.push_back(1);
+    v.push_back(2);
+    v.push_back(3);
+    assert(v[0] == 1);
+    assert(v[1] == 2);
+    assert(v[2] == 3);
+    assert(v.size() == 3);
+    std::cout << "PASS test_vector_push_and_access\n";
+}
+
+void test_vector_pop_back() {
+    Vector<int> v;
+    v.push_back(10);
+    v.push_back(20);
+    v.pop_back();
+    assert(v.size() == 1);
+    assert(v[0] == 10);
+    std::cout << "PASS test_vector_pop_back\n";
+}
+
+void test_vector_pop_empty() {
+    Vector<int> v;
+    v.pop_back();  // should not crash or underflow
+    assert(v.size() == 0);
+    std::cout << "PASS test_vector_pop_empty\n";
+}
+
+void test_vector_fill_constructor() {
+    Vector<int> v(5, 7);
+    assert(v.size() == 5);
+    for (size_t i = 0; i < 5; i++) assert(v[i] == 7);
+    std::cout << "PASS test_vector_fill_constructor\n";
+}
+
+void test_vector_grow_past_capacity() {
+    Vector<int> v;
+    for (int i = 0; i < 20; i++) v.push_back(i);
+    assert(v.size() == 20);
+    for (int i = 0; i < 20; i++) assert(v[i] == i);
+    std::cout << "PASS test_vector_grow_past_capacity\n";
+}
+
+void test_vector_remove_middle() {
+    Vector<int> v;
+    v.push_back(1); v.push_back(2); v.push_back(3); v.push_back(4);
+    v.remove(1);  // remove 2
+    assert(v.size() == 3);
+    assert(v[0] == 1);
+    assert(v[1] == 3);
+    assert(v[2] == 4);
+    std::cout << "PASS test_vector_remove_middle\n";
+}
+
+void test_vector_resize_grow() {
+    Vector<int> v;
+    v.push_back(1); v.push_back(2);
+    v.resize(5);
+    assert(v.size() == 5);
+    assert(v[0] == 1);
+    assert(v[1] == 2);
+    assert(v[2] == 0);  // new slots default-initialized
+    std::cout << "PASS test_vector_resize_grow\n";
+}
+
+void test_vector_resize_shrink() {
+    Vector<int> v;
+    v.push_back(1); v.push_back(2); v.push_back(3);
+    v.resize(1);
+    assert(v.size() == 1);
+    assert(v[0] == 1);
+    std::cout << "PASS test_vector_resize_shrink\n";
+}
+
+void test_vector_reserve() {
+    Vector<int> v;
+    v.push_back(1);
+    v.reserve(100);
+    assert(v.capacity() >= 100);
+    assert(v.size() == 1);
+    assert(v[0] == 1);
+    std::cout << "PASS test_vector_reserve\n";
+}
+
+void test_vector_empty() {
+    Vector<int> v;
+    assert(v.empty());
+    v.push_back(1);
+    assert(!v.empty());
+    std::cout << "PASS test_vector_empty\n";
+}
+
+// ---- MVector (mutex) tests ----
+
+void test_mvector_push_and_access() {
+    MVector<int> v;
+    v.push_back(1);
+    v.push_back(2);
+    assert(v[0] == 1);
+    assert(v[1] == 2);
+    assert(v.size() == 2);
+    std::cout << "PASS test_mvector_push_and_access\n";
+}
+
+void test_mvector_concurrent_push() {
+    MVector<int> v;
+    std::vector<std::thread> threads;
+    for (int i = 0; i < 8; i++)
+        threads.emplace_back([&v]{ for (int j = 0; j < 100; j++) v.push_back(j); });
+    for (auto &t : threads) t.join();
+    assert(v.size() == 800);
+    std::cout << "PASS test_mvector_concurrent_push\n";
+}
+
+void test_mvector_concurrent_push_pop() {
+    MVector<int> v;
+    for (int i = 0; i < 100; i++) v.push_back(i);
+    std::vector<std::thread> threads;
+    for (int i = 0; i < 4; i++)
+        threads.emplace_back([&v]{ for (int j = 0; j < 10; j++) v.push_back(j); });
+    for (int i = 0; i < 4; i++)
+        threads.emplace_back([&v]{ for (int j = 0; j < 10; j++) v.pop_back(); });
+    for (auto &t : threads) t.join();
+    // size should be 100 (40 pushed, 40 popped) — no crash is the main check
+    assert(v.size() == 100);
+    std::cout << "PASS test_mvector_concurrent_push_pop\n";
+}
+
+void test_mvector_remove() {
+    MVector<int> v;
+    v.push_back(10); v.push_back(20); v.push_back(30);
+    v.remove(0);
+    assert(v.size() == 2);
+    assert(v[0] == 20);
+    std::cout << "PASS test_mvector_remove\n";
+}
+
 int main() {
     test_insert_and_get();
     test_update_existing_key();
@@ -192,6 +336,20 @@ int main() {
     test_append_new_key_no_combine();
     test_append_custom_combine();
     test_append_string_concat();
+    test_vector_push_and_access();
+    test_vector_pop_back();
+    test_vector_pop_empty();
+    test_vector_fill_constructor();
+    test_vector_grow_past_capacity();
+    test_vector_remove_middle();
+    test_vector_resize_grow();
+    test_vector_resize_shrink();
+    test_vector_reserve();
+    test_vector_empty();
+    test_mvector_push_and_access();
+    test_mvector_concurrent_push();
+    test_mvector_concurrent_push_pop();
+    test_mvector_remove();
     std::cout << "All tests passed.\n";
     return 0;
 }
