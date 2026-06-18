@@ -10,6 +10,7 @@
 #include "queue.h"
 #include "priority_queue.h"
 #include "unordered_set.h"
+#include "merkle_tree.h"
 
 void test_insert_and_get() {
     SparseDenseMap<std::string, int> m;
@@ -541,6 +542,77 @@ void test_uset_contains_after_tombstone() {
     std::cout << "PASS test_uset_contains_after_tombstone\n";
 }
 
+// ---- MerkleTree tests ----
+
+void test_merkle_single_element() {
+    std::vector<int> data = {42};
+    MerkleTree tree(data.begin(), data.end());
+    Hash256 expected = sha256(&data[0], sizeof(int));
+    assert(tree.root() == expected);
+    std::cout << "PASS test_merkle_single_element\n";
+}
+
+void test_merkle_two_elements() {
+    std::vector<int> data = {1, 2};
+    MerkleTree tree(data.begin(), data.end());
+    Hash256 leaf0 = sha256(&data[0], sizeof(int));
+    Hash256 leaf1 = sha256(&data[1], sizeof(int));
+    Hash256 pair[2] = {leaf0, leaf1};
+    Hash256 expected = sha256(pair, sizeof(pair));
+    assert(tree.root() == expected);
+    std::cout << "PASS test_merkle_two_elements\n";
+}
+
+void test_merkle_different_data_different_root() {
+    std::vector<int> a = {1, 2, 3, 4};
+    std::vector<int> b = {1, 2, 3, 5};
+    MerkleTree ta(a.begin(), a.end());
+    MerkleTree tb(b.begin(), b.end());
+    assert(ta.root() != tb.root());
+    std::cout << "PASS test_merkle_different_data_different_root\n";
+}
+
+void test_merkle_same_data_same_root() {
+    std::vector<int> a = {10, 20, 30};
+    std::vector<int> b = {10, 20, 30};
+    MerkleTree ta(a.begin(), a.end());
+    MerkleTree tb(b.begin(), b.end());
+    assert(ta.root() == tb.root());
+    std::cout << "PASS test_merkle_same_data_same_root\n";
+}
+
+void test_merkle_order_matters() {
+    std::vector<int> a = {1, 2};
+    std::vector<int> b = {2, 1};
+    MerkleTree ta(a.begin(), a.end());
+    MerkleTree tb(b.begin(), b.end());
+    assert(ta.root() != tb.root());
+    std::cout << "PASS test_merkle_order_matters\n";
+}
+
+void test_merkle_non_power_of_two() {
+    // 3 leaves — tree pads to 4, last leaf is duplicated
+    std::vector<int> data = {7, 8, 9};
+    MerkleTree tree(data.begin(), data.end());
+    // just verify it doesn't crash and root is deterministic
+    MerkleTree tree2(data.begin(), data.end());
+    assert(tree.root() == tree2.root());
+    std::cout << "PASS test_merkle_non_power_of_two\n";
+}
+
+void test_merkle_large_dataset() {
+    std::vector<int> data(128);
+    for (int i = 0; i < 128; i++) data[i] = i;
+    MerkleTree tree(data.begin(), data.end());
+    MerkleTree tree2(data.begin(), data.end());
+    assert(tree.root() == tree2.root());
+    // mutate one element — root must differ
+    data[64] = 999;
+    MerkleTree tree3(data.begin(), data.end());
+    assert(tree.root() != tree3.root());
+    std::cout << "PASS test_merkle_large_dataset\n";
+}
+
 int main() {
     test_insert_and_get();
     test_update_existing_key();
@@ -596,6 +668,13 @@ int main() {
     test_uset_remove_nonexistent();
     test_uset_remove_then_reinsert();
     test_uset_contains_after_tombstone();
+    test_merkle_single_element();
+    test_merkle_two_elements();
+    test_merkle_different_data_different_root();
+    test_merkle_same_data_same_root();
+    test_merkle_order_matters();
+    test_merkle_non_power_of_two();
+    test_merkle_large_dataset();
     std::cout << "All tests passed.\n";
     return 0;
 }
