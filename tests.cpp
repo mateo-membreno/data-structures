@@ -9,6 +9,7 @@
 #include "mutex_vector.h"
 #include "queue.h"
 #include "priority_queue.h"
+#include "unordered_set.h"
 
 void test_insert_and_get() {
     SparseDenseMap<std::string, int> m;
@@ -468,6 +469,78 @@ void test_pq_custom_comparator() {
     std::cout << "PASS test_pq_custom_comparator\n";
 }
 
+// ---- UnorderedSet tests ----
+
+void test_uset_constructor_empty() {
+    UnorderedSet<int> s;
+    assert(s.size() == 0);
+    assert(s.contains(1) == false);
+    std::cout << "PASS test_uset_constructor_empty\n";
+}
+
+void test_uset_insert_and_contains() {
+    UnorderedSet<int> s;
+    s.insert(10);
+    s.insert(20);
+    assert(s.contains(10) == true);
+    assert(s.contains(20) == true);
+    assert(s.contains(99) == false);
+    std::cout << "PASS test_uset_insert_and_contains\n";
+}
+
+void test_uset_insert_duplicate() {
+    UnorderedSet<int> s;
+    s.insert(5);
+    s.insert(5);
+    assert(s.size() == 1);
+    std::cout << "PASS test_uset_insert_duplicate\n";
+}
+
+void test_uset_insert_triggers_resize() {
+    UnorderedSet<int> s;
+    for (int i = 0; i < 20; i++) s.insert(i);
+    for (int i = 0; i < 20; i++) assert(s.contains(i) == true);
+    assert(s.contains(99) == false);
+    std::cout << "PASS test_uset_insert_triggers_resize\n";
+}
+
+void test_uset_remove_basic() {
+    UnorderedSet<int> s;
+    s.insert(7);
+    s.remove(7);
+    assert(s.contains(7) == false);
+    assert(s.size() == 0);
+    std::cout << "PASS test_uset_remove_basic\n";
+}
+
+void test_uset_remove_nonexistent() {
+    UnorderedSet<int> s;
+    s.insert(1);
+    s.remove(99); // should not crash or corrupt
+    assert(s.contains(1) == true);
+    assert(s.size() == 1);
+    std::cout << "PASS test_uset_remove_nonexistent\n";
+}
+
+void test_uset_remove_then_reinsert() {
+    UnorderedSet<int> s;
+    s.insert(3);
+    s.remove(3);
+    s.insert(3);
+    assert(s.contains(3) == true);
+    assert(s.size() == 1);
+    std::cout << "PASS test_uset_remove_then_reinsert\n";
+}
+
+// Tombstone probing: element that probed past a deleted slot must still be found
+void test_uset_contains_after_tombstone() {
+    UnorderedSet<int> s;
+    for (int i = 0; i < 10; i++) s.insert(i);
+    s.remove(0);
+    for (int i = 1; i < 10; i++) assert(s.contains(i) == true);
+    std::cout << "PASS test_uset_contains_after_tombstone\n";
+}
+
 int main() {
     test_insert_and_get();
     test_update_existing_key();
@@ -515,6 +588,14 @@ int main() {
     test_pq_grow_past_capacity();
     test_pq_sorted_extraction();
     test_pq_custom_comparator();
+    test_uset_constructor_empty();
+    test_uset_insert_and_contains();
+    test_uset_insert_duplicate();
+    test_uset_insert_triggers_resize();
+    test_uset_remove_basic();
+    test_uset_remove_nonexistent();
+    test_uset_remove_then_reinsert();
+    test_uset_contains_after_tombstone();
     std::cout << "All tests passed.\n";
     return 0;
 }
