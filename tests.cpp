@@ -11,6 +11,7 @@
 #include "priority_queue.h"
 #include "unordered_set.h"
 #include "merkle_tree.h"
+#include "ring_buffer.h"
 
 void test_insert_and_get() {
     SparseDenseMap<std::string, int> m;
@@ -613,6 +614,104 @@ void test_merkle_large_dataset() {
     std::cout << "PASS test_merkle_large_dataset\n";
 }
 
+// ---- RingBuffer tests ----
+
+void test_rb_initial_state() {
+    RingBuffer<int> rb(4);
+    assert(rb.is_empty());
+    assert(!rb.is_full());
+    std::cout << "PASS test_rb_initial_state\n";
+}
+
+void test_rb_write_and_read() {
+    RingBuffer<int> rb(4);
+    rb.write(42);
+    assert(!rb.is_empty());
+    assert(rb.read() == 42);
+    assert(rb.is_empty());
+    std::cout << "PASS test_rb_write_and_read\n";
+}
+
+void test_rb_fifo_order() {
+    RingBuffer<int> rb(8);
+    rb.write(1);
+    rb.write(2);
+    rb.write(3);
+    assert(rb.read() == 1);
+    assert(rb.read() == 2);
+    assert(rb.read() == 3);
+    std::cout << "PASS test_rb_fifo_order\n";
+}
+
+void test_rb_full_detection() {
+    RingBuffer<int> rb(4); // holds 3 items (capacity - 1)
+    rb.write(1);
+    rb.write(2);
+    rb.write(3);
+    assert(rb.is_full());
+    std::cout << "PASS test_rb_full_detection\n";
+}
+
+void test_rb_read_empty_returns_default() {
+    RingBuffer<int> rb(4);
+    assert(rb.read() == 0); // default-constructed int
+    std::cout << "PASS test_rb_read_empty_returns_default\n";
+}
+
+void test_rb_write_when_full_is_dropped() {
+    RingBuffer<int> rb(4); // holds 3 items
+    rb.write(1);
+    rb.write(2);
+    rb.write(3);
+    rb.write(99); // should be silently dropped
+    assert(rb.is_full());
+    assert(rb.read() == 1);
+    assert(rb.read() == 2);
+    assert(rb.read() == 3);
+    assert(rb.is_empty());
+    std::cout << "PASS test_rb_write_when_full_is_dropped\n";
+}
+
+void test_rb_wrap_around() {
+    RingBuffer<int> rb(4); // holds 3 items
+    rb.write(1);
+    rb.write(2);
+    rb.write(3);
+    assert(rb.read() == 1); // consume one slot
+    rb.write(4);            // wraps around
+    assert(rb.read() == 2);
+    assert(rb.read() == 3);
+    assert(rb.read() == 4);
+    assert(rb.is_empty());
+    std::cout << "PASS test_rb_wrap_around\n";
+}
+
+void test_rb_concurrent_single_producer_consumer() {
+    const int N = 1000;
+    RingBuffer<int> rb(N + 1);
+
+    std::thread producer([&]() {
+        for (int i = 0; i < N; ++i) {
+            while (rb.is_full()) {} // spin
+            rb.write(i);
+        }
+    });
+
+    int sum = 0;
+    std::thread consumer([&]() {
+        for (int i = 0; i < N; ++i) {
+            while (rb.is_empty()) {} // spin
+            sum += rb.read();
+        }
+    });
+
+    producer.join();
+    consumer.join();
+
+    assert(sum == N * (N - 1) / 2);
+    std::cout << "PASS test_rb_concurrent_single_producer_consumer\n";
+}
+
 int main() {
     test_insert_and_get();
     test_update_existing_key();
@@ -675,6 +774,17 @@ int main() {
     test_merkle_order_matters();
     test_merkle_non_power_of_two();
     test_merkle_large_dataset();
+
+    // Ring buffer tests
+    test_rb_initial_state();
+    test_rb_write_and_read();
+    test_rb_fifo_order();
+    test_rb_full_detection();
+    test_rb_read_empty_returns_default();
+    test_rb_write_when_full_is_dropped();
+    test_rb_wrap_around();
+    test_rb_concurrent_single_producer_consumer();
+
     std::cout << "All tests passed.\n";
     return 0;
 }
