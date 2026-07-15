@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <string>
 
 
 inline uint64_t fnv1a_64(const void* data, size_t len) {
@@ -17,6 +18,10 @@ inline uint64_t fnv1a_64(const void* data, size_t len) {
 template <typename T>
 inline uint64_t fnv1a(const T& val) {
     return fnv1a_64(&val, sizeof(T));
+}
+
+inline uint64_t fnv1a(const std::string& val) {
+    return fnv1a_64(val.data(), val.size());
 }
 
 struct Hash256 {
