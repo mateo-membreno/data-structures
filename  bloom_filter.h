@@ -1,6 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <cmath>
+#include <numeric>
 #include <string>
 #include "hash_utils.h"
 
@@ -19,27 +20,30 @@ public:
 
    bool insert(T data){
         uint64_t hash_a = fnv1a(data);
-        uint64_t hash_b = fnv1a_64(&hash_a, sizeof(hash_a));
+        uint64_t hash_b = fnv1a(hash_a);
 
-        bool already_present = true;
+        if (hash_b == 0) hash_b = 1;
+        while (std::gcd(hash_b, static_cast<uint64_t>(num_bits_)) != 1) hash_b++;
+
+        bool inserted = false;
         for (size_t i = 0; i < num_hashes_; i++) {
             size_t index = (hash_a + i * hash_b) % num_bits_;
-            if (!get_bit(index)) already_present = false;
+            if (!get_bit(index)) inserted = true;
             set_bit(index);
         }
 
-        if (!already_present) count_++;
-        return already_present;
+        if (inserted) count_++;
+        return inserted;
    }
 
 
 private:
     uint8_t *data_;
-    size_t num_bits_;
-    size_t num_hashes_;
-    size_t count_;
-    size_t checkpoint_rate_;
-    string checkpoint_file_;
+    size_t num_bits_; // how many bits wide the filter should be(i.e. max items it can hold) 
+    size_t num_hashes_; // how many bits to check in filter
+    size_t count_; // number of present elements
+    size_t checkpoint_rate_; // after how many inserts to chechpoint
+    string checkpoint_file_; 
 
     void set_bit(size_t index) {
         if (index >= num_bits_) return;
