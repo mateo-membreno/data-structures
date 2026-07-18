@@ -1,43 +1,49 @@
 #pragma once
-#include <atomic>
 #include <cstddef>
+#include <stdexcept>
+
+namespace ring_buffer {
 
 template <typename T>
-class RingBuffer {
+class Basic {
 public:
     // capacity is number of T objects, T must be default constructable and destructable
-    // TODO: fix lots of cache invalidation for atomic head and tail accesses 
-    RingBuffer(uint64_t capacity) : data_(new T[capacity]), capacity_(capacity), head_(0), tail_(0) {}
+    Basic(uint64_t capacity) : data_(new T[capacity]), capacity_(capacity), size_(0), head_(0), tail_(0) {}
 
-    ~RingBuffer() {
+    ~Basic() {
         delete[] data_;
     }
 
     T read(){
-        if (is_empty()) return T{};
-        uint64_t head = head_.load(std::memory_order_relaxed);
-        T val = data_[head];
-        head_.store((head + 1) % capacity_, std::memory_order_release);
-        return val;
+        if (is_empty()) throw std::out_of_range("read from empty RingBuffer");
+
+        size_--;
+        T value = data_[head_];
+        head_ = (head_ + 1) % capacity_;
+        return value;
     }
-    void write(const T &value){
-        if (!is_full()){
-            uint64_t tail = tail_.load(std::memory_order_relaxed);
-            data_[tail] = value;
-            tail_.store((tail + 1) % capacity_, std::memory_order_release);
-        }
+    bool write(const T &value){
+        if (is_full()) return false;
+
+        data_[tail_] = value;
+        tail_ = (tail_ + 1) % capacity_;
+        size_++;
+        return true;
     }
 
     bool is_empty(){
-        return head_.load(std::memory_order_acquire) == tail_.load(std::memory_order_acquire);
+        return size_ == 0;
     }
     bool is_full(){
-        return (tail_.load(std::memory_order_acquire) + 1) % capacity_ == head_.load(std::memory_order_acquire);
+      return size_ == capacity_;
     }
 
 private:
     T* data_;
     uint64_t capacity_;
-    std::atomic<uint64_t> head_;
-    std::atomic<uint64_t> tail_;
+    uint64_t size_;
+    uint64_t head_;
+    uint64_t tail_;
 };
+
+}  // namespace ring_buffer

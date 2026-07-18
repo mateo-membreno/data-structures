@@ -12,6 +12,8 @@
 #include "unordered_set.h"
 #include "merkle_tree.h"
 #include "ring_buffer.h"
+#include " bloom_filter.h"
+#include <cstdio>
 
 void test_insert_and_get() {
     SparseDenseMap<std::string, int> m;
@@ -617,14 +619,14 @@ void test_merkle_large_dataset() {
 // ---- RingBuffer tests ----
 
 void test_rb_initial_state() {
-    RingBuffer<int> rb(4);
+    ring_buffer::Basic<int> rb(4);
     assert(rb.is_empty());
     assert(!rb.is_full());
     std::cout << "PASS test_rb_initial_state\n";
 }
 
 void test_rb_write_and_read() {
-    RingBuffer<int> rb(4);
+    ring_buffer::Basic<int> rb(4);
     rb.write(42);
     assert(!rb.is_empty());
     assert(rb.read() == 42);
@@ -633,7 +635,7 @@ void test_rb_write_and_read() {
 }
 
 void test_rb_fifo_order() {
-    RingBuffer<int> rb(8);
+    ring_buffer::Basic<int> rb(8);
     rb.write(1);
     rb.write(2);
     rb.write(3);
@@ -644,51 +646,62 @@ void test_rb_fifo_order() {
 }
 
 void test_rb_full_detection() {
-    RingBuffer<int> rb(4); // holds 3 items (capacity - 1)
+    ring_buffer::Basic<int> rb(4); // holds 4 items (full capacity)
     rb.write(1);
     rb.write(2);
     rb.write(3);
+    rb.write(4);
     assert(rb.is_full());
     std::cout << "PASS test_rb_full_detection\n";
 }
 
-void test_rb_read_empty_returns_default() {
-    RingBuffer<int> rb(4);
-    assert(rb.read() == 0); // default-constructed int
-    std::cout << "PASS test_rb_read_empty_returns_default\n";
+void test_rb_read_empty_throws() {
+    ring_buffer::Basic<int> rb(4);
+    bool threw = false;
+    try {
+        rb.read();
+    } catch (const std::out_of_range&) {
+        threw = true;
+    }
+    assert(threw);
+    std::cout << "PASS test_rb_read_empty_throws\n";
 }
 
 void test_rb_write_when_full_is_dropped() {
-    RingBuffer<int> rb(4); // holds 3 items
+    ring_buffer::Basic<int> rb(4); // holds 4 items
     rb.write(1);
     rb.write(2);
     rb.write(3);
+    rb.write(4);
     rb.write(99); // should be silently dropped
     assert(rb.is_full());
     assert(rb.read() == 1);
     assert(rb.read() == 2);
     assert(rb.read() == 3);
+    assert(rb.read() == 4);
     assert(rb.is_empty());
     std::cout << "PASS test_rb_write_when_full_is_dropped\n";
 }
 
 void test_rb_wrap_around() {
-    RingBuffer<int> rb(4); // holds 3 items
+    ring_buffer::Basic<int> rb(4); // holds 4 items
     rb.write(1);
     rb.write(2);
     rb.write(3);
     assert(rb.read() == 1); // consume one slot
     rb.write(4);            // wraps around
+    rb.write(5);
     assert(rb.read() == 2);
     assert(rb.read() == 3);
     assert(rb.read() == 4);
+    assert(rb.read() == 5);
     assert(rb.is_empty());
     std::cout << "PASS test_rb_wrap_around\n";
 }
 
 void test_rb_concurrent_single_producer_consumer() {
     const int N = 1000;
-    RingBuffer<int> rb(N + 1);
+    ring_buffer::Basic<int> rb(N + 1);
 
     std::thread producer([&]() {
         for (int i = 0; i < N; ++i) {
@@ -710,6 +723,71 @@ void test_rb_concurrent_single_producer_consumer() {
 
     assert(sum == N * (N - 1) / 2);
     std::cout << "PASS test_rb_concurrent_single_producer_consumer\n";
+}
+
+// ---- BloomFilter tests ----
+
+void test_bloom_insert_then_contains() {
+    BloomFilter<int> bf(0.01, 1000, "bloom_test_unused.bin");
+    bf.insert(1);
+    bf.insert(2);
+    bf.insert(3);
+    assert(bf.contains(1));
+    assert(bf.contains(2));
+    assert(bf.contains(3));
+    std::cout << "PASS test_bloom_insert_then_contains\n";
+}
+
+void test_bloom_contains_before_insert_is_false() {
+    BloomFilter<int> bf(0.001, 1000, "bloom_test_unused.bin");
+    // low false-positive rate + few inserted items makes a false positive here
+    // astronomically unlikely, so this is safe to assert deterministically.
+    assert(!bf.contains(42));
+    std::cout << "PASS test_bloom_contains_before_insert_is_false\n";
+}
+
+void test_bloom_insert_return_value() {
+    BloomFilter<int> bf(0.01, 1000, "bloom_test_unused.bin");
+    assert(bf.insert(7) == true);   // first insert sets new bits
+    assert(bf.insert(7) == false);  // same item, no new bits set
+    std::cout << "PASS test_bloom_insert_return_value\n";
+}
+
+void test_bloom_string_keys() {
+    BloomFilter<std::string> bf(0.01, 1000, "bloom_test_unused.bin");
+    bf.insert(std::string("hello"));
+    bf.insert(std::string("world"));
+    assert(bf.contains(std::string("hello")));
+    assert(bf.contains(std::string("world")));
+    assert(!bf.contains(std::string("goodbye")));
+    std::cout << "PASS test_bloom_string_keys\n";
+}
+
+void test_bloom_checkpoint_writes_file() {
+    const char* path = "bloom_test_checkpoint.bin";
+    std::remove(path);
+
+    BloomFilter<int> bf(0.01, 1000, path);
+    bf.insert(1);
+    bf.insert(2);
+    bf.checkpoint();
+
+    FILE* f = fopen(path, "rb");
+    assert(f != nullptr);
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fclose(f);
+    assert(size > 0);
+
+    std::remove(path);
+    std::cout << "PASS test_bloom_checkpoint_writes_file\n";
+}
+
+void test_bloom_no_false_negatives_many_items() {
+    BloomFilter<int> bf(0.01, 1000, "bloom_test_unused.bin");
+    for (int i = 0; i < 500; i++) bf.insert(i);
+    for (int i = 0; i < 500; i++) assert(bf.contains(i)); // a bloom filter must never false-negative
+    std::cout << "PASS test_bloom_no_false_negatives_many_items\n";
 }
 
 int main() {
@@ -780,10 +858,18 @@ int main() {
     test_rb_write_and_read();
     test_rb_fifo_order();
     test_rb_full_detection();
-    test_rb_read_empty_returns_default();
+    test_rb_read_empty_throws();
     test_rb_write_when_full_is_dropped();
     test_rb_wrap_around();
     test_rb_concurrent_single_producer_consumer();
+
+    // Bloom filter tests
+    test_bloom_insert_then_contains();
+    test_bloom_contains_before_insert_is_false();
+    test_bloom_insert_return_value();
+    test_bloom_string_keys();
+    test_bloom_checkpoint_writes_file();
+    test_bloom_no_false_negatives_many_items();
 
     std::cout << "All tests passed.\n";
     return 0;
