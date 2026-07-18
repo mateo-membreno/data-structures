@@ -1,5 +1,7 @@
 #pragma once
+#include <algorithm>
 #include <cstddef>
+#include <cstring>
 #include <stdexcept>
 
 namespace ring_buffer {
@@ -44,6 +46,61 @@ private:
     uint64_t size_;
     uint64_t head_;
     uint64_t tail_;
+};
+
+
+class VarLen {
+public:
+    // also single threaded, but now allocating variable length data
+    VarLen(uint64_t total_bytes) : data_(new uint8_t[total_bytes]), byte_capacity_(total_bytes), size_(0), head_(0), tail_(0) {}
+
+    ~VarLen() {
+        delete[] data_;
+    }
+
+    bool read(uint8_t *dest, uint64_t len) {
+        if (len > size_) return false;
+
+        uint64_t first_chunk = std::min(len, byte_capacity_ - head_);
+        std::memcpy(dest, data_ + head_, first_chunk);
+        if (first_chunk < len) {
+            std::memcpy(dest + first_chunk, data_, len - first_chunk);
+        }
+
+        head_ = (head_ + len) % byte_capacity_;
+        size_ -= len;
+        return true;
+    }
+
+    bool write(const uint8_t *value, uint64_t len){
+        if (len > byte_capacity_ - size_) return false;
+
+        uint64_t first_chunk = std::min(len, byte_capacity_ - tail_);
+        std::memcpy(data_ + tail_, value, first_chunk);
+        if (first_chunk < len) {
+            std::memcpy(data_, value + first_chunk, len - first_chunk);
+        }
+
+        tail_ = (tail_ + len) % byte_capacity_;
+        size_ += len;
+        return true;
+    }
+
+    bool is_empty(){
+        return size_ == 0;
+    }
+    bool is_full(){
+        return size_ == byte_capacity_;
+    }
+
+    private:
+
+    uint8_t *data_;
+    uint64_t byte_capacity_;
+    uint64_t size_;
+    uint64_t head_;
+    uint64_t tail_;
+
 };
 
 }  // namespace ring_buffer
