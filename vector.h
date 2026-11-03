@@ -11,8 +11,26 @@ public:
             data_[i] = val;
         }
     }
-    ~Vector() { 
-        delete[] data_; 
+    Vector(const Vector &other) : data_(new T[other.capacity_]), size_(other.size_), capacity_(other.capacity_) {
+        for (size_t i = 0; i < size_; i++){
+            data_[i] = other.data_[i];
+        }
+    }
+    Vector &operator=(const Vector &other){
+        if (this != &other){
+            T *copy = new T[other.capacity_];
+            for (size_t i = 0; i < other.size_; i++){
+                copy[i] = other.data_[i];
+            }
+            delete[] data_;
+            data_ = copy;
+            size_ = other.size_;
+            capacity_ = other.capacity_;
+        }
+        return *this;
+    }
+    ~Vector() {
+        delete[] data_;
     }
 
     void push_back(const T &val){
@@ -39,14 +57,14 @@ public:
         return data_[index];
     }
     const T &operator[](size_t index) const{
-        return data_[index]
+        return data_[index];
     }
 
     size_t size() const{
         return size_;
     }
     
-     size_t capacity() const{
+    size_t capacity() const{
         return capacity_;
     }
 
